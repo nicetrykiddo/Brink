@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.zip
+*.jsonl
+*.sqlite*
+*.db
+*.log
+replay-report*.json
+.env*
+.ctx/
