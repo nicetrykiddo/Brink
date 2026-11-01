@@ -20,6 +20,35 @@ replace, reorganize, and delete it when justified. Challenge this brief's
 assumptions as well. Do not implement a preselected design simply because it was
 suggested in a chat.
 
+## Product scope: runtime-agnostic, not a ZCode tool
+
+**ZCode and OpenCode are test harnesses and early integration targets, not
+Brink's intended users, API, or architectural center.** The goal is a portable
+supervision layer that can improve arbitrary autonomous agents when their host
+runtime exposes sufficient observation and control capabilities. HTB and CTF
+performance is the initial proving ground; coding, research, and other agent
+workflows must remain possible without rewriting the core.
+
+Independently determine how to integrate across different agent hosts and
+capability levels. Treat agent adapters as replaceable integration surfaces,
+not as the definition of the product. Supported hooks, events, process
+interfaces, sidecars, wrappers, extensions, and other mechanisms are candidates
+to investigate, **not requirements to implement blindly**.
+
+Be precise about guarantees: observing a transcript, inferring stalled
+reasoning, asking an agent to pivot, cancelling a model call, and resuming an
+agent with revised instructions are *different* capabilities. A genuinely
+universal and reliable intervention API cannot be presumed to exist. Establish
+what is technically possible for each supported runtime and expose limitations
+rather than simulating control.
+
+Optimization target is **verified task success within competitive wall-clock
+time**, subject to safety and resource constraints, not merely fewer model
+tokens, faster tool calls, or more alerts. Avoid forcing pivots when an
+investigation has positive evidence or a legitimate long-running dependency.
+Account for interruption overhead and false positives. Historical ZIPs and
+replay reports are development fixtures, not the primary user workflow.
+
 ## Evidence and environment
 
 - Read the repository, its tests, and relevant ContextForge implementation
