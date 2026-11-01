@@ -4,6 +4,20 @@
 
 Brink is an experimental, deterministic supervisor for autonomous agents. It targets HTB/CTF workflows first, but the engine is designed to support other tasks. **v0.1 implements offline replay only.** It does not control ZCode, interrupt the model, verify flags, or use any LLM.
 
+## Preferred Go core
+
+Go 1.21+ provides the new dependency-free CLI and replay engine. The original
+Python replay remains as a comparison oracle during migration.
+
+```bash
+go test ./...
+go run ./cmd/brink replay "$HOME/Downloads/zcode-full-session(1).zip" --json go-report.json
+go build -o brink-cli ./cmd/brink
+```
+
+The Go report was compared against the Python output using the private Reactor
+session: all report fields matched exactly. No private trace is committed.
+
 ## First use: audit a ZCode run
 
 Requires Python 3.10+ and an exported ZCode session ZIP containing `database/part.jsonl`, `database/tool_usage.jsonl`, and `database/model_usage.jsonl` (optional).
