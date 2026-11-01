@@ -25,7 +25,13 @@ Reimplementing a memory ledger or adding another self-monitoring skill would dup
 | --- | --- | --- |
 | Reactor ZIP and ZCode local files | Retrospective observation | Any live control from file access |
 | ZCode documented hooks | Tool admission/context/stop hooks described by vendor | In-flight model cancellation; installed-build conformance |
-| OpenCode v2.1.4 ACP | Local initialization negotiated v1 | Cancellation/resumption until a live test proves it |
+| OpenCode v2.1.4 ACP | Initialization, cancellation acknowledgement, loopback stream closure, resumed tool and verified output | Real-provider billing cancellation; HTB benefit |
 | Owned subprocess | OS process ownership enables bounded cleanup | Undoing remote effects or killing detached grandchildren |
 
 References: [ACP initialization](https://agentclientprotocol.com/protocol/v1/initialization), [prompt turns](https://agentclientprotocol.com/protocol/v1/prompt-turn), [cancellation](https://agentclientprotocol.com/protocol/v1/cancellation), [ZCode hooks](https://zcode.z.ai/en/docs/hooks). Vendor documentation changes; the local experiments take precedence for capability claims. No hooks were installed into global configuration.
+
+## ZCode bundled app-server discovery
+
+The installed desktop launcher is not the headless entrypoint. `/usr/lib/zcode/glm/zcode.cjs --help` reports CLI 0.17.0 and a stdio app server. Source inspection identifies `session/create`, `session/send`, `session/stop` and snapshot/event APIs. A network-disabled process with its home masked answered `runtime/capabilities`. The bundled executable needs explicit provider-config paths when launched outside Electron because its default relative config search does not match this package layout.
+
+This is a viable second adapter candidate, not a reason to redesign the core around ZCode. Its send call admits a background turn immediately; stop triggers an abort controller and returns before the background turn necessarily settles. An adapter must observe the later idle/completed state before resuming. Treating its send/stop response as ACP prompt completion would create overlapping work or false cancellation claims. No ZCode model prompt or desktop intervention has been run yet.

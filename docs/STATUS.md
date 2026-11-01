@@ -1,35 +1,46 @@
 # Brink status — 2026-11-01
 
-## Established facts
+## Verified milestones
 
-- Working tree began at `3aae9f4`; the untracked `brink-cli` binary predates this work and is untouched.
-- Both existing test suites pass. They exercise offline replay, not supervision.
-- Read every JSONL member of the complete private Reactor ZIP, including all 96 model request/response records, 417 parts, 108 tool records, three user inputs, session state, todos and turn accounting. No screenshots used or private source copied into Git.
-- Reactor: 96 requests to GLM-5.3-Flash, 108 tools, 1,738.201 seconds summed request wall time; two cancelled requests. Zero verified flags in the export. Model-IO and database durations differ slightly; use database accounting consistently.
-- Reviewed ContextForge local implementation at `07dc4b3eb586b033a64967dec9270041f9a0258d`, including experiment gates, audit, evidence validation and lifecycle hooks. It remains unchanged and optional.
-- Installed OpenCode v2.1.4 answers ACP v1 initialization in an isolated temporary environment without a model request. This establishes protocol availability only.
-- `/usr/bin/zcode --help` launches the desktop app, rather than a headless CLI. Do not use it for command discovery again. No GUI input or model prompt was sent.
+1. `4b3585e`: direct audit of the complete private Reactor export and ContextForge implementation; [case study](reactor-case-study.md) and [architecture](architecture.md). No screenshots or public solutions.
+2. Dependency-free Go live supervisor implemented: ACP initialization, new session, streamed tool lifecycle, independent external checks, finite milestone progress, bounded tool grace, cancel/settle/redirect, overall deadline and owned process-group cleanup. See [README](../README.md).
+3. Real installed OpenCode v2.1.4 plus a loopback scripted provider: cancelled turn acknowledged, original HTTP stream closed, resumed tool wrote the expected file, independent checker accepted its content. One verification-only baseline took 2.996 s; supervised case 1.443 s. **Synthetic control validation, not real-model/HTB performance evidence.**
 
-## Decision and current work
+## Tests and measurements
 
-Build a dependency-free Go ACP client/supervisor, separate from replay and optional memory. Use independently executed task checks for progress/success; streaming prose and tool count cannot reset a progress deadline. Confirm cancellation before sending revised instructions. Test cancellation failure explicitly. Keep runtime-specific adapters replaceable.
+- `go test ./... -count=1`, `go test -race ./... -count=1`, and `go vet ./...` pass.
+- Local control fixtures cover stalls, lies, milestone reuse, active-tool grace, ignored cancellation, permission denial, checker failure/timeout/schema errors, already-verified success, missed stalls and false interventions. A longer-budget control proves the false-intervention fixture would succeed uninterrupted.
+- Opt-in real OpenCode integration passes. Test setup uses an empty credential environment, fresh XDG directories, local scripted provider and one allowed file edit.
+- External-check microbenchmark: 2.506 ms/check, 30 iterations; this is spawn/check overhead, not a solve-speed benchmark.
+- Historical Python tests passed before changes; Python replay remains only a historical comparison fixture. No Python dependency in live runtime.
+- Full evidence and limitations: [validation](validation.md).
 
-This is an architectural hypothesis, not an established performance improvement. Time limits can cause false positives; milestone checks and bounded active-tool grace must be tested. A success check supplied by the operator is trusted code and must not simply accept the agent's report.
+## Established environment and integration facts
 
-## Verified checks
+- Original untracked `brink-cli` binary is untouched. No Git history rewritten or remote push performed.
+- ContextForge local implementation reviewed at `07dc4b3eb586b033a64967dec9270041f9a0258d`; memory, gates and hooks remain optional and unchanged.
+- The Reactor ZIP has 96 model exchanges, 417 parts, 108 tool records, three inputs and zero verified flags. Summed model request time is 1,738.201 s. Keep it private outside this repository.
+- `/usr/bin/zcode --help` launches the desktop app; do not use it for CLI discovery. Bundled CLI exists at `/usr/lib/zcode/glm/zcode.cjs` (version 0.17.0).
+- Read bundled CLI implementation: it has a stdio `app-server`, `session/create`, `session/send`, `session/stop` and session snapshots/events. `session/send` immediately admits background work; its response does not mean the turn completed. `session/stop` aborts a controller; the response alone does not prove cancellation settled.
+- A network-disabled Bubblewrap process with a masked home directory successfully answered `runtime/capabilities`. No model prompt or live desktop mutation was sent. The protocol differs from ACP and cannot be passed to Brink's ACP adapter directly.
+- Online ZCode hook documentation conflicts with some bundled guide text on workspace hook execution. Do not rely on either as installed-build conformance proof. No global hooks installed.
 
-`go test ./...` and `python -m unittest discover -s tests -v` passed before edits.
+## Current limits and next work
 
-## Blockers and limits
+Brink now has a working live control path, but its first decision policy is an evidence deadline with operator-supplied redirect instructions. It does not yet independently select strategic attack pivots or semantically judge arbitrary target results. A sparse/incorrect milestone checker can interrupt productive work. The check program must be independently trustworthy; same-user execution is not a sandbox.
 
-No remote inference or paid model use is authorized. No new HTB solve or matched real-model comparison has run. ACP cancellation/resumption has not yet been tested. ZCode's documented hooks do not establish cancellation of an in-flight model request in the installed desktop build.
+No remote inference/paid use is authorized, so a new real-model lab solve and matched live comparison have not run. Continue locally: extract a second host adapter only when tested protocol semantics justify it; start with an isolated ZCode app-server and local provider, proving idle-after-stop before another send. Keep control and evidence independent of its private storage layout.
 
 ## Exact next commands
 
 ```sh
-go test ./...
-go run ./cmd/brink replay "$HOME/data/HackTheBox/kitchen/zcode-full-session.zip"
-opencode acp --help
+go build -o /tmp/brink ./cmd/brink
+/tmp/brink probe -- opencode acp
+go test ./... -count=1
+go test -race ./... -count=1
+go vet ./...
+BRINK_ACP_HOST=/usr/bin/opencode go test ./internal/supervise -run TestOpenCodeLocal -v -count=1
+node /usr/lib/zcode/glm/zcode.cjs --help
 ```
 
-Implement ACP supervision and a harmless local cancellation/resumption fixture next; update this file with actual results and runnable commands as each milestone lands.
+Before any real-model comparison, explicitly obtain inference authorization, provision independent evaluator checks and paired isolated task conditions. Do not infer permission from existing credentials or replay data. Do not rerun the historical offensive commands just to validate the supervisor.

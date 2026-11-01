@@ -1,50 +1,80 @@
 # Brink
 
-**Observe. Detect. Intervene (eventually).**
+Brink supervises an owned agent process through ACP v1. It runs independent task checks, bounds time without verified progress, cancels an overdue turn, waits for it to settle, and resumes the same session with operator-supplied instructions. The runtime is dependency-free Go on Linux.
 
-Brink is an experimental, deterministic supervisor for autonomous agents. It targets HTB/CTF workflows first, but the engine is designed to support other tasks. **v0.1 implements offline replay only.** It does not control ZCode, interrupt the model, verify flags, or use any LLM.
+**Live cancellation and resumption are verified with installed OpenCode v2.1.4 and a loopback scripted provider. Improved real-model HTB/CTF solving is not yet established.** The [Reactor analysis](docs/reactor-case-study.md) explains the failure that motivates this work. [Current status](docs/STATUS.md) includes reproducible commands and open work.
 
-## Preferred Go core
-
-Go 1.21+ provides the new dependency-free CLI and replay engine. The original
-Python replay remains as a comparison oracle during migration.
-
-```bash
+```sh
+go build -o /tmp/brink ./cmd/brink
 go test ./...
-go run ./cmd/brink replay "$HOME/Downloads/zcode-full-session(1).zip" --json go-report.json
-go build -o brink-cli ./cmd/brink
+go test -race ./...
+go vet ./...
+/tmp/brink probe -- opencode acp
 ```
 
-The Go report was compared against the Python output using the private Reactor
-session: all report fields matched exactly. No private trace is committed.
+`probe` performs initialization only: no session or model prompt. It does not establish cancellation support. `supervise` sends prompts and uses whatever provider the selected host is configured to use; configure and authorize that inference separately.
 
-## First use: audit a ZCode run
+## Run a supervised task
 
-Requires Python 3.10+ and an exported ZCode session ZIP containing `database/part.jsonl`, `database/tool_usage.jsonl`, and `database/model_usage.jsonl` (optional).
+Keep configuration and the checking program outside the agent's writable workspace. For example, save the following as a private JSON file, replacing absolute paths and instructions with your actual authorized task:
 
-```bash
-python3 -m brink replay "$HOME/Downloads/zcode-full-session(1).zip" --json replay-report.json
-python3 -m unittest discover -s tests -v
+```json
+{
+  "cwd": "/absolute/isolated/workspace",
+  "prompt": "Complete the authorized task, preserving concrete evidence for its acceptance checks.",
+  "redirect": "The evidence deadline expired. Identify the unproved prerequisite, run the shortest discriminating test, and reassess the mechanism if its prerequisite remains unsupported. Preserve new positive evidence and obey the original scope.",
+  "check": ["/absolute/trusted/check-program", "/absolute/isolated/workspace"],
+  "milestones": ["applicability", "initial-access", "user-access"],
+  "stall_seconds": 180,
+  "max_seconds": 1800,
+  "tool_grace_seconds": 30,
+  "cancel_seconds": 10,
+  "check_every_seconds": 2,
+  "check_timeout_seconds": 5,
+  "max_redirects": 2
+}
 ```
 
-Output contains counts, tool mechanism classifications, delayed model calls, and time spent on local research without a live probe. Reports **never include raw prompts, commands, outputs, or model reasoning**. Do not commit/export raw session ZIPs to a public repo: they can contain credentials, flags, private data, and internal reasoning.
+```sh
+/tmp/brink supervise /absolute/private/run.json -- opencode acp > /absolute/private/control.jsonl
+```
 
-## What the findings do and do not prove
+The check is an argument vector, executed without an implicit shell in `cwd`. It must exit zero and emit one JSON object:
 
-- Long model calls consume wall-clock time, but may contain legitimate analysis. The current threshold is an **alert**, not proof that the model is wrong.
-- `local_research_drift` detects local package/code investigation that continues after the last live target probe. Some long local investigations are necessary. The rule is **heuristic** and may have false positives/negatives.
-- `masked_tool_error` flags a known trap: piping a failing CLI command into `tail` or `head` can hide the failing exit code.
-- Every alert is **retrospective**. No real-time detection or GUI intervention has been verified.
-- No attack techniques, test target IPs, secrets, or raw transcripts belong in this repository.
+```json
+{"success": false, "milestones": ["applicability"]}
+```
 
-## Next milestones
+`success` is required. Milestones must belong to the finite configured list. Each new milestone extends the evidence window once; repeats, prose, token output, notes and tool counts do not. Set an empty list if only final success can be measured, understanding that this makes false interventions more likely during productive intermediate work. Checks must be cheap, read-only and specific enough to reject forged or stale results. For HTB, use an authorized evaluator or independent access/flag validation, rather than trusting a file saying the agent succeeded. Brink supplies the check mechanism, not a universal exploit oracle.
 
-1. Add live read-only ZCode SQLite/JSONL observation and stable incremental event IDs.
-2. Benchmark alert precision against manually reviewed checkpoints, not just alert counts.
-3. Prove X11 GUI control against a disposable window before testing ZCode. Only then add optional, explicitly authorized intervention.
-4. Add OpenCode adapter. Keep mission policy separate from adapter and supervisor.
-5. Integrate ContextForge as an optional evidence store; keep backward compatibility and avoid duplicated responsibilities.
+Time fields default to the values above when omitted. The operator must supply `cwd`, `prompt`, `check`, and `redirect` (unless `max_redirects` is zero). The hard run deadline includes startup and check time; cancellation cleanup can add up to `cancel_seconds`. An active tool gets finite grace on the current evidence window, not unlimited extensions. The progress window starts after host setup. An agent that finishes without passing its check gets a bounded retry with the redirect instructions. The audit records `unverified_end` before that final check; this event alone does not mean failure.
 
-## Constraints
+Brink exits zero only on independently checked success, including success already present before starting a host. It exits nonzero on unverified completion, exhausted limits, check/protocol errors or failed cancellation. It never sends a second prompt while the previous prompt is outstanding. Failed cancellation stops the owned process group and reports an error.
 
-Python standard library only; safe on Linux; no subprocess/network calls during replay. Treat `.zcode` and raw exports as sensitive. The GitHub repo must contain **source and synthetic tests only**.
+## Local verification without inference
+
+```sh
+go test ./internal/supervise -run 'TestControl|TestKnownPolicyLimits|TestFalseAlarmControl' -v
+BRINK_ACP_HOST=/usr/bin/opencode go test ./internal/supervise -run TestOpenCodeLocal -v -count=1
+```
+
+The opt-in integration test starts real OpenCode in fresh temporary XDG directories with an empty credential environment, a loopback-only provider, and permission to write one fixture file. It runs a baseline and a supervised case, checks actual file contents, and checks that the interrupted HTTP stream closes. It never contacts a remote inference provider. The provider deliberately simulates a slow route and a faster route after redirection; its timing difference is a control test, **not a real-model performance claim**. See [validation](docs/validation.md).
+
+## Capabilities and boundaries
+
+- ACP v1 is the first host adapter, not a requirement that arbitrary runtimes already expose control. Unsupported hosts need a separate adapter. No GUI automation or live database mutation is used.
+- A host's cancelled-turn result proves that its prompt settled. It cannot guarantee provider billing cancellation or undo remote/tool side effects. The local integration additionally checks closure of the scripted provider connection.
+- Permission requests received over ACP are cancelled. Brink grants no filesystem/terminal client capabilities. The host can still use its own tools under its existing permissions: **Brink is not a sandbox**. Configure host permissions and OS isolation independently.
+- Audit output contains event names, times, counts and cancellation status. Raw prompts, tool output, model text, host stderr, session IDs, milestone names and credentials are excluded. Host-native logs still follow the host's own storage policy.
+- External checks are trusted operator code. Same-user agents can modify accessible files or the evaluator; separate permissions/evaluator isolation are needed for adversarial validation.
+- ContextForge remains optional memory. It is not required or modified. [Architecture and audit](docs/architecture.md) explain why its experiment bookkeeping does not replace runtime control.
+
+## Historical diagnostic
+
+```sh
+go run ./cmd/brink replay "$HOME/data/HackTheBox/kitchen/zcode-full-session.zip"
+```
+
+The existing replay classifies command strings and emits retrospective alerts. Its hard-coded hints are specific to the historical experiment and are not the live supervision policy. It does not prove exploitability or predict a saved solve. The original Python replay remains a historical comparison fixture; no Python is required for live Brink.
+
+Keep private ZIPs, flags, credentials and model logs outside public Git. The repository contains source, synthetic tests and sanitized analysis only.
