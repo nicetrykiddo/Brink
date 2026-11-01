@@ -4,14 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/nicetrykiddo/Brink/internal/acp"
-	"github.com/nicetrykiddo/Brink/internal/replay"
-	"github.com/nicetrykiddo/Brink/internal/supervise"
 	"io"
 	"os"
 	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
+
+	"github.com/nicetrykiddo/Brink/internal/acp"
+	"github.com/nicetrykiddo/Brink/internal/replay"
+	"github.com/nicetrykiddo/Brink/internal/supervise"
 )
 
 func usage() {
@@ -87,7 +89,7 @@ func run(args []string) error {
 	return nil
 }
 func live(args []string) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if args[0] == "probe" {
 		if len(args) < 3 || args[1] != "--" {
@@ -118,6 +120,13 @@ func live(args []string) error {
 		return err
 	}
 	defer f.Close()
+	stat, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if !stat.Mode().IsRegular() || stat.Size() > 1<<20 {
+		return fmt.Errorf("config must be a regular file of at most 1 MiB")
+	}
 	d := json.NewDecoder(io.LimitReader(f, 1<<20))
 	d.DisallowUnknownFields()
 	cfg := supervise.Defaults()

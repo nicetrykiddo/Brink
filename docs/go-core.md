@@ -1,24 +1,15 @@
-# Go core migration
+# Go runtime and historical replay
 
-This port adds a dependency-free Go 1.21+ replay engine and CLI alongside the
-Python v0.1 reference. The initial React/Next.js Reactor trace was replayed in
-both implementations and the resulting structured JSON was exactly equal
-(96 model calls, 108 tool calls, 11 advisory alerts).
+The dependency-free Go CLI now supports live ACP supervision as well as historical replay. Start with the [README](../README.md), [architecture](architecture.md) and [validation record](validation.md).
 
-## Commands
-
-```bash
+```sh
 go test ./...
-go run ./cmd/brink replay "$HOME/Downloads/zcode-full-session(1).zip" --json go-report.json
-go build -o brink-cli ./cmd/brink
+go test -race ./...
+go vet ./...
+go build -o /tmp/brink ./cmd/brink
+/tmp/brink probe -- opencode acp
 ```
 
-## Boundaries
+The original Python and Go replayers matched on the private Reactor export: 96 model records, 108 tools and 11 retrospective alerts. Those heuristics remain diagnostic fixtures and are not the live supervision policy. Python is not required for the live runtime.
 
-- The ZIP reader only loads metadata and command strings transiently for classification.
-  Reports never contain commands, prompts, tool output, raw model reasoning, or flags.
-- This is still **retrospective**. No live observer, model cancellation, or X11
-  automation has been implemented.
-- Preserve the Python replay until the Go build has also been verified on
-  the intended host.
-- Next milestone: read-only live ZCode adapter and incremental event IDs.
+Live control uses independent external evidence checks and confirmed turn settlement before resumption. Runtime-specific logs, SQLite layouts and desktop GUI control are not its API. See [STATUS](STATUS.md) for current capabilities and remaining work.

@@ -11,7 +11,7 @@ Use database request durations for timing below. Model-IO durations differ by te
 | Measure | Observed |
 | --- | --- |
 | Model | GLM-5.3-Flash, same provider/model on all 96 records |
-| Model requests | 96, including two cancellations |
+| Model requests | 96: 95 main-turn requests and one session-title request; including two cancellations |
 | Tool usage | 108 records |
 | Summed request durations | 1,738.201 seconds, about 29 minutes |
 | Median request duration | 5.259 seconds |

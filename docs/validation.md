@@ -14,7 +14,7 @@ Ordinary tests use deterministic local subprocesses. Only the last command launc
 
 ## Established control behavior
 
-- Initialization negotiates ACP v1; mismatched versions are rejected.
+- Initialization negotiates ACP v1; mismatched versions are rejected. Prompt stop reasons are validated, and malformed cancellation results never permit resumption.
 - A stalled turn is cancelled. Its outstanding response settles before the next prompt is submitted.
 - In the real-host test, the scripted HTTP provider sees its original streaming connection close before redirection. OpenCode emits the cancelled prompt result. Its next turn executes a real file-writing tool and passes the external check.
 - Repeated milestone names extend the deadline only once; invented milestones are rejected.
@@ -36,9 +36,11 @@ One recorded matched pair on this machine:
 
 The supervised evidence deadline fired at 1.3595 s, cancellation settled at 1.3755 s, and redirection was submitted at 1.3780 s. Most initial time was host startup (about 0.85 s). Both cases include the same checking mechanism; the baseline has no strategic redirect and a longer evidence deadline. A cancellation after verified completion is cleanup, not a strategic intervention.
 
-The provider deliberately spends two seconds on the initial route and answers the redirect immediately. Therefore this experiment validates wall-clock control, resumed tool execution and independent verification; **the timing difference cannot estimate HTB speedup or the quality of a real model's pivot**. Exact durations vary on repetition.
+The provider deliberately spends two seconds on the initial route and answers the redirect immediately. Therefore this experiment validates wall-clock control, resumed tool execution and independent verification; **the timing difference cannot estimate HTB speedup or the quality of a real model's pivot**. Exact durations vary on repetition. A subsequent run under Go race instrumentation also passed: baseline 3.053 s, supervised 1.458 s, one interrupted provider stream and one acknowledged cancelled turn before redirection.
 
 The evidence-check subprocess benchmark measured 2.506 ms per check over 30 iterations on an i5-13450HX. At the default two-second polling interval, that is approximately 0.13% elapsed-time occupancy for this tiny checker, not a measured CPU percentage. Real checks can be much more expensive. No resident-memory or production-load guarantee is inferred from this microbenchmark.
+
+CLI tests also cover configuration defaults, invalid/trailing/oversized configuration, missing arguments and success verification before host startup. SIGINT and SIGTERM use bounded cancellation cleanup. Linux parent-death signals stop direct owned children if their creating process/thread dies; this does not establish cleanup of detached descendants or crash recovery.
 
 ## Deliberately demonstrated limitations
 

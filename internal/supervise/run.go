@@ -203,16 +203,14 @@ func Run(parent context.Context, cfg Config, command []string, out io.Writer) (r
 				}
 				if p.Message.IsResponse(id) {
 					m := p.Message
-					var response struct {
-						StopReason string `json:"stopReason"`
-					}
 					if m.Error != nil && m.Error.Code != -32800 {
 						return errors.New("host failed while cancelling")
 					}
-					if m.Error == nil && json.Unmarshal(m.Result, &response) != nil {
-						return errors.New("invalid cancellation response")
+					reason, parseErr := acp.StopReason(m.Result)
+					if m.Error == nil && parseErr != nil {
+						return parseErr
 					}
-					return log("turn_settled", 0, response.StopReason == "cancelled" || m.Error != nil)
+					return log("turn_settled", 0, reason == "cancelled" || m.Error != nil)
 				}
 				if err := c.HandleRequest(stopCtx, p.Message); err != nil {
 					return err
@@ -240,11 +238,8 @@ func Run(parent context.Context, cfg Config, command []string, out io.Writer) (r
 				if p.Message.Error != nil {
 					return result, fmt.Errorf("prompt failed (code %d)", p.Message.Error.Code)
 				}
-				var response struct {
-					StopReason string `json:"stopReason"`
-				}
-				if json.Unmarshal(p.Message.Result, &response) != nil || response.StopReason == "" {
-					return result, errors.New("invalid prompt result")
+				if _, err := acp.StopReason(p.Message.Result); err != nil {
+					return result, err
 				}
 				reason, ended = "unverified_end", true
 			} else if err := update(p.Message); err != nil {
@@ -293,14 +288,15 @@ func Run(parent context.Context, cfg Config, command []string, out io.Writer) (r
 			result.Reason = "redirect_limit"
 			return result, nil
 		}
-		result.Redirects++
 		active = map[string]bool{}
 		// A redirect gets one fresh bounded experiment, not a claim of progress.
 		lastProgress = time.Now()
-		id, err = prompt(cfg.Redirect)
+		instructions := fmt.Sprintf("Independent check: %s; %d of %d declared milestones accepted; final success remains unverified.\n%s", reason, len(known), len(cfg.Milestones), cfg.Redirect)
+		id, err = prompt(instructions)
 		if err != nil {
 			return result, err
 		}
+		result.Redirects++
 		if err := log("redirect_sent", result.Redirects, false); err != nil {
 			return result, err
 		}

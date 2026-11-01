@@ -30,7 +30,7 @@ func check(ctx context.Context, cfg Config) (Evidence, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, cfg.Check[0], cfg.Check[1:]...)
 	cmd.Dir = cfg.Cwd
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = 100 * time.Millisecond
 	var b limitedBuffer

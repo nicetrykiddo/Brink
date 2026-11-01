@@ -44,6 +44,10 @@ func TestFixture(t *testing.T) {
 			fmt.Println(`{"success":true,"untrusted":1}`)
 			os.Exit(0)
 		}
+		if scenario == "check_large" {
+			fmt.Print(strings.Repeat("x", 65537))
+			os.Exit(0)
+		}
 		b, err := os.ReadFile(filepath.Join(dir, "proof"))
 		if err != nil {
 			b = []byte(`{"success":false,"milestones":[]}`)
@@ -81,7 +85,11 @@ func TestFixture(t *testing.T) {
 		}
 		switch m.Method {
 		case "initialize":
-			response(m.ID, map[string]any{"protocolVersion": 1})
+			if scenario == "bad_version" {
+				response(m.ID, map[string]any{"protocolVersion": 99})
+			} else {
+				response(m.ID, map[string]any{"protocolVersion": 1})
+			}
 		case "session/new":
 			response(m.ID, map[string]string{"sessionId": "local"})
 		case "session/prompt":
@@ -110,7 +118,9 @@ func TestFixture(t *testing.T) {
 				}
 			}
 		case "session/cancel":
-			if scenario != "ignores_cancel" {
+			if scenario == "invalid_cancel" {
+				response(pending, map[string]any{})
+			} else if scenario != "ignores_cancel" {
 				response(pending, map[string]string{"stopReason": "cancelled"})
 			}
 		}
@@ -135,10 +145,13 @@ func TestControl(t *testing.T) {
 		{"productive", true, "verified", 0, false},
 		{"milestones", false, "redirect_limit", 1, false},
 		{"ignores_cancel", false, "error", 0, true},
+		{"invalid_cancel", false, "error", 0, true},
 		{"permission", false, "redirect_limit", 1, false},
 		{"check_error", false, "error", 0, true},
 		{"check_hang", false, "error", 0, true},
 		{"check_invalid", false, "error", 0, true},
+		{"check_large", false, "error", 0, true},
+		{"bad_version", false, "error", 0, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -50,7 +50,7 @@ func Start(command []string, cwd string) (*Client, error) {
 	}
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Dir = cwd
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -133,6 +133,19 @@ func (c *Client) Notify(ctx context.Context, method string, params any) error {
 
 func (m Message) IsResponse(id int) bool {
 	return m.Method == "" && string(m.ID) == strconv.Itoa(id)
+}
+
+func StopReason(raw json.RawMessage) (string, error) {
+	var result struct {
+		Reason string `json:"stopReason"`
+	}
+	if json.Unmarshal(raw, &result) == nil {
+		switch result.Reason {
+		case "end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled":
+			return result.Reason, nil
+		}
+	}
+	return "", errors.New("invalid prompt result")
 }
 
 // HandleRequest never grants permissions or advertises client filesystem/terminal access.
